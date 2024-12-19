@@ -244,6 +244,10 @@ if (chatBody) {
                     });
                 }
                 //End Xóa Tin Nhắn
+
+                //Zoom Ảnh
+                new Viewer(newChat);
+                //End Zoom Ảnh 
             } else {
                 console.log("No data available");
             }

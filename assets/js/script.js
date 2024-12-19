@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebas
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-analytics.js";
 import { getDatabase, ref, child, get, push, set, update, remove, onValue, onChildAdded, onChildRemoved } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+import * as Popper from 'https://cdn.jsdelivr.net/npm/@popperjs/core@^2/dist/esm/index.js'
 
 const firebaseConfig = {
     apiKey: "AIzaSyBV-d4pDFcNFsGsw1W8OqnsNMeUeAY4KSw",
@@ -117,19 +118,53 @@ if (buttonLogout) {
 //Form Chat
 const formChat = document.querySelector("[chat] .inner-form");
 if (formChat) {
-    formChat.addEventListener("submit", (event) => {
+    // Upload Image
+    const uploadImages = new FileUploadWithPreview.FileUploadWithPreview('upload-images', {
+        maxFileCount: 6,
+        multiple: true
+    });
+
+    formChat.addEventListener("submit", async (event) => {
         event.preventDefault();
 
         const content = formChat.content.value;
         const userId = auth.currentUser.uid;
+        const images = uploadImages.cachedFileArray || [];
 
-        if (content && userId) {
+        if ((content || images.length > 0) && userId) {
+            const imagesLink = [];
+
+            if (images.length > 0) {
+                const url = 'https://api.cloudinary.com/v1_1/dcqxxq8sn/image/upload';
+
+                const formData = new FormData();
+
+                for (let i = 0; i < images.length; i++) {
+                    let file = images[i];
+                    formData.append('file', file);
+                    formData.append('upload_preset', 'a4er6x3q');
+
+                    await fetch(url, {
+                        method: 'POST',
+                        body: formData,
+                    })
+                        .then((response) => {
+                            return response.json();
+                        })
+                        .then((data) => {
+                            imagesLink.push(data.url);
+                        });
+                }
+            }
+
             set(push(ref(db, "chats")), {
                 content: content,
+                images: imagesLink,
                 userId: userId
             });
 
             formChat.content.value = "";
+            uploadImages.resetPreviewPanel();
         }
     });
 }
@@ -142,6 +177,7 @@ if (chatBody) {
         const key = data.key;
         const userId = data.val().userId;
         const content = data.val().content;
+        const images = data.val().images;
 
         get(child(dbRef, `users/${userId}`)).then((snapshot) => {
             if (snapshot.exists()) {
@@ -169,25 +205,44 @@ if (chatBody) {
                     `;
                 }
 
+                let htmlContent = "";
+                if (content) {
+                    htmlContent = `
+                        <div class="inner-content">
+                            ${content}
+                        </div>
+                    `;
+                }
+
+                let htmlImages = "";
+                if (images && images.length > 0) {
+                    htmlImages += "<div class='inner-images'>";
+                    images.forEach(image => {
+                        htmlImages += `
+                            <img src="${image}" />
+                        `;
+                    });
+                    htmlImages += "</div>";
+                }
+
                 newChat.innerHTML = `
                     ${htmlFullName}
-                    <div class="inner-content">
-                        ${content}
-                    </div>
+                    ${htmlContent}
+                    ${htmlImages}
                     ${htmlButtonDelete}
                 `;
 
                 chatBody.appendChild(newChat);
-                
+
                 chatBody.scrollTop = chatBody.scrollHeight;
 
                 //Xóa Tin Nhắn
-                    const buttonDelete = newChat.querySelector(".button-delete");
-                    if(buttonDelete){
-                        buttonDelete.addEventListener("click", () => {
-                            remove(ref(db, '/chats/' + key));
-                        });
-                    }
+                const buttonDelete = newChat.querySelector(".button-delete");
+                if (buttonDelete) {
+                    buttonDelete.addEventListener("click", () => {
+                        remove(ref(db, '/chats/' + key));
+                    });
+                }
                 //End Xóa Tin Nhắn
             } else {
                 console.log("No data available");
@@ -203,8 +258,33 @@ if (chatBody) {
 onChildRemoved(chatsRef, (data) => {
     const key = data.key;
     const chatItem = chatBody.querySelector(`[chat-key="${key}"]`);
-    if(chatItem){
+    if (chatItem) {
         chatItem.remove();
     }
 });
 //End Lắng nghe tin nhắn bị xóa
+
+// Chèn Icon
+const emojiPicker = document.querySelector('emoji-picker');
+if (emojiPicker) {
+    const button = document.querySelector('.button-icon');
+    const buttonIcon = document.querySelector('.button-icon i');
+    const tooltip = document.querySelector('.tooltip');
+    Popper.createPopper(button, tooltip);
+    button.addEventListener("click", () => {
+        tooltip.classList.toggle('shown');
+    });
+
+    const inputChat = document.querySelector(".chat .inner-form input[name='content']");
+    emojiPicker.addEventListener('emoji-click', event => {
+        const icon = event.detail.unicode;
+        inputChat.value = inputChat.value + icon;
+    });
+
+    document.addEventListener("click", (event) => {
+        if (!emojiPicker.contains(event.target) && (event.target != button && event.target != buttonIcon)) {
+            tooltip.classList.remove('shown');
+        }
+    });
+}
+//End Chèn Icon
